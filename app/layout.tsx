@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BelugAI",
-  description: "Your friendly AI study buddy for Grades 7–12.",
+  title: "BelugAI | AI Academic Tutor",
+  description: "Your friendly AI study buddy for Grades 7-12",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

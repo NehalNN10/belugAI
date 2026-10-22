@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BelugAI
 
-## Getting Started
+A friendly AI study buddy for Grades 7–12. Students can type, snap a photo of a problem, or dictate a question, and BelugAI guides them Socratically (hints and questions, not just answers). It only helps with school subjects.
 
-First, run the development server:
+Built with Next.js (App Router), TypeScript, Tailwind CSS and the Google Gemini API (`@google/genai`).
+
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+cp .env.example .env.local   # then add your GEMINI_API_KEY
+pnpm dev                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Variable | Purpose |
+| --- | --- |
+| `GEMINI_API_KEY` | Your Gemini API key (server-side only) |
+| `GEMINI_MODEL` | Model id, e.g. `gemini-3.5-flash` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Push the repo and import it at vercel.com/new (framework: Next.js).
+2. Add `GEMINI_API_KEY` and `GEMINI_MODEL` under Settings → Environment Variables.
+3. Deploy. Voice input needs HTTPS, which Vercel provides.
 
-## Learn More
+## Notes (POC)
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Voice input uses the browser's Web Speech API (Chrome, Edge, Safari). Other browsers fall back to typing.
+- Images are downscaled in the browser before upload to stay under Vercel's request size limit.
+- No database or accounts; chat history lives in the browser tab.
