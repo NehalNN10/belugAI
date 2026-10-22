@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import Mascot from "./Mascot";
 
 type Message = { role: "user" | "model"; text: string; error?: boolean };
 
 const SUGGESTIONS = ["Explain gravity", "What is a prime number?", "Help me understand fractions"];
-const ERROR_TEXT = "Oops, I got tangled in the seaweed 🌊 Please try again.";
+const ERROR_TEXT = "Oops, I knocked something off the shelf 🐾 Please try again.";
 const MAX_TEXTAREA_PX = 120; // ~5 rows
 
 export default function Chat() {
@@ -71,9 +72,7 @@ export default function Chat() {
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-2">
         {messages.length === 0 && !isLoading && (
           <div className="mt-10 text-center">
-            <div className="text-5xl" aria-hidden>
-              🐳
-            </div>
+            <Mascot className="mx-auto h-24 w-24" />
             <h2 className="mt-3 text-lg font-semibold text-sky-900">Hi! I&apos;m BelugAI.</h2>
             <p className="mt-1 text-sm text-sky-700">
               Ask me about math, science, English, or history. I&apos;ll help you figure it out!
