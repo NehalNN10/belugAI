@@ -15,6 +15,28 @@ type Message = {
 };
 type Attachment = { dataUrl: string; mimeType: string };
 
+// Minimal Web Speech API typings (not in TypeScript's DOM lib).
+type SpeechResult = { 0: { transcript: string }; isFinal: boolean };
+type SpeechEvent = { results: ArrayLike<SpeechResult> };
+type Recognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((e: SpeechEvent) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+};
+type RecognitionCtor = new () => Recognition;
+
+function getRecognitionCtor(): RecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 const SUGGESTIONS = ["Explain gravity", "What is a prime number?", "Help me understand fractions"];
 const ERROR_TEXT = "Oops, I knocked something off the shelf 🐾 Please try again.";
 const IMAGE_ONLY_PROMPT = "Help me with the problem in this image.";
@@ -56,10 +78,59 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<Recognition | null>(null);
+  const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  // Dictation changes `input` programmatically, so grow the textarea whenever it changes.
+  useEffect(() => {
+    resizeTextarea();
+  }, [input]);
+
+  // Don't leave the mic open if the component unmounts.
+  useEffect(() => () => recognitionRef.current?.abort(), []);
+
+  function toggleListening() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Ctor = getRecognitionCtor();
+    if (!Ctor) {
+      alert("Voice input isn't supported in this browser. Try Chrome, Edge or Safari, or just type your question!");
+      return;
+    }
+    const rec = new Ctor();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    const base = input && !/\s$/.test(input) ? `${input} ` : input; // keep what was already typed
+    rec.onresult = (e) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      setInput(base + transcript.trimStart());
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        alert("Microphone access is blocked. Allow it in your browser's site settings to use voice input.");
+      }
+      setIsListening(false);
+    };
+    rec.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+      setIsListening(true);
+    } catch {
+      setIsListening(false);
+    }
+  }
 
   function resizeTextarea() {
     const el = textareaRef.current;
@@ -88,6 +159,7 @@ export default function Chat() {
   async function send(raw: string) {
     const typed = raw.trim();
     if ((!typed && !attachment) || isLoading) return;
+    recognitionRef.current?.stop();
 
     const text = typed || IMAGE_ONLY_PROMPT;
     const sentImage = attachment;
@@ -218,7 +290,7 @@ export default function Chat() {
         }}
         className="shrink-0 px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]"
       >
-        <div className="flex items-end gap-2 rounded-3xl border border-sky-200 bg-white p-2 shadow-sm focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-200">
+        <div className="flex items-end gap-1 rounded-3xl border border-sky-200 bg-white p-2 shadow-sm focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-200">
           <input
             ref={fileInputRef}
             type="file"
@@ -232,10 +304,27 @@ export default function Chat() {
             disabled={isLoading}
             aria-label="Attach image"
             title="Attach a photo of your problem"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sky-600 transition hover:bg-sky-100 disabled:opacity-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sky-600 transition hover:bg-sky-100 disabled:opacity-50"
           >
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleListening}
+            disabled={isLoading}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+            aria-pressed={isListening}
+            title={isListening ? "Stop listening" : "Speak your question"}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition disabled:opacity-50 ${
+              isListening ? "animate-pulse bg-red-500 text-white" : "text-sky-600 hover:bg-sky-100"
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 11a7 7 0 0014 0M12 18v4M8 22h8" />
             </svg>
           </button>
 
@@ -266,16 +355,19 @@ export default function Chat() {
                 resizeTextarea();
               }}
               onKeyDown={onKeyDown}
-              className="max-h-[120px] min-h-10 w-full resize-none bg-transparent px-2 py-2 text-base text-gray-900 outline-none disabled:opacity-60"
+              className="max-h-[120px] min-h-11 w-full resize-none bg-transparent px-2 py-2 text-base text-gray-900 outline-none disabled:opacity-60"
             />
           </div>
 
           <button
             type="submit"
             disabled={!canSend}
-            className="h-10 shrink-0 rounded-full bg-blue-500 px-5 font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Send"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Send
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
           </button>
         </div>
       </form>
