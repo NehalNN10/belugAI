@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type Part } from "@google/genai";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 
 export const maxDuration = 30;
 
 const MAX_HISTORY = 20;
+const MAX_IMAGE_BASE64_CHARS = 3_000_000; // ~2.2 MB binary; client downscales far below this
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const DEFAULT_IMAGE_PROMPT = "Help me with the problem in this image.";
 
 type Turn = { role: "user" | "model"; text: string };
+type Image = { base64: string; mimeType: string };
 
 function parseHistory(raw: unknown): Turn[] {
   if (!Array.isArray(raw)) return [];
@@ -18,6 +22,21 @@ function parseHistory(raw: unknown): Turn[] {
         h.text.trim() !== "",
     )
     .slice(-MAX_HISTORY);
+}
+
+function parseImage(raw: unknown): Image | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  const { base64, mimeType } = raw as Partial<Image>;
+  if (
+    typeof base64 !== "string" ||
+    base64.length === 0 ||
+    base64.length > MAX_IMAGE_BASE64_CHARS ||
+    typeof mimeType !== "string" ||
+    !ALLOWED_IMAGE_TYPES.includes(mimeType)
+  ) {
+    return "invalid";
+  }
+  return { base64, mimeType };
 }
 
 export async function POST(req: NextRequest) {
@@ -33,18 +52,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { message: raw, history: rawHistory } = (body ?? {}) as {
-    message?: unknown;
-    history?: unknown;
-  };
-  const message = typeof raw === "string" ? raw.trim() : "";
+  const {
+    message: rawMessage,
+    history: rawHistory,
+    image: rawImage,
+  } = (body ?? {}) as { message?: unknown; history?: unknown; image?: unknown };
+
+  const image = parseImage(rawImage);
+  if (image === "invalid") {
+    return NextResponse.json({ error: "Unsupported or oversized image." }, { status: 400 });
+  }
+
+  let message = typeof rawMessage === "string" ? rawMessage.trim() : "";
+  if (!message && image) message = DEFAULT_IMAGE_PROMPT;
   if (!message) {
     return NextResponse.json({ error: "`message` is required." }, { status: 400 });
   }
 
+  const parts: Part[] = [{ text: message }];
+  if (image) parts.push({ inlineData: { data: image.base64, mimeType: image.mimeType } });
+
   const contents = [
     ...parseHistory(rawHistory).map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
-    { role: "user" as const, parts: [{ text: message }] },
+    { role: "user" as const, parts },
   ];
 
   try {
